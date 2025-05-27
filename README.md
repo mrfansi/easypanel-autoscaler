@@ -29,7 +29,7 @@ If you want to build the executable yourself:
 1. Create a virtual environment:
 
    ```
-   python3 -m .venv venv
+   python3 -m venv .venv
    ```
 
 2. Activate the virtual environment:
