@@ -7,6 +7,10 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+import urllib3
+
+# Disable SSL warnings when verify=False is used
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 DEFAULT_MIN_REPLICAS = 1
 DEFAULT_MAX_REPLICAS = 10
@@ -183,15 +187,16 @@ def get_api_config():
 
     base_url = api_config.get("base_url") or os.getenv("EASYPANEL_API_URL", DEFAULT_API_BASE_URL)
     token = api_config.get("token") or os.getenv("EASYPANEL_API_TOKEN", DEFAULT_API_TOKEN)
+    verify_ssl = api_config.get("verify_ssl", True)  # Default to True for security
 
     if not token:
         raise ValueError("API token is required. Set it in services.json under 'api.token' or as EASYPANEL_API_TOKEN environment variable.")
 
-    return base_url.rstrip('/'), token
+    return base_url.rstrip('/'), token, verify_ssl
 
 def make_api_request(endpoint, params=None, method="GET", data=None):
     """Make a request to the Easypanel API with detailed logging."""
-    base_url, token = get_api_config()
+    base_url, token, verify_ssl = get_api_config()
     url = f"{base_url}{endpoint}"
 
     headers = {
@@ -211,9 +216,9 @@ def make_api_request(endpoint, params=None, method="GET", data=None):
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response = requests.get(url, headers=headers, params=params, timeout=30, verify=verify_ssl)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=data, timeout=30)
+            response = requests.post(url, headers=headers, json=data, timeout=30, verify=verify_ssl)
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
 
@@ -610,9 +615,12 @@ def trigger_deployment(deployment_url, project_name, service_name, full_name):
         deployment_url=deployment_url)
 
     try:
+        # Get SSL verification setting from config
+        _, _, verify_ssl = get_api_config()
+
         # The deployment URL is typically a direct HTTP endpoint
         # We need to make a POST request to it
-        response = requests.post(deployment_url, timeout=60)
+        response = requests.post(deployment_url, timeout=60, verify=verify_ssl)
 
         if response.status_code in [200, 201, 202]:
             log(f"Successfully triggered deployment for {full_name}",
