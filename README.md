@@ -1,10 +1,10 @@
 # Easypanel Autoscaler
 
-An automatic scaling tool for Docker Swarm services based on CPU usage.
+An automatic scaling tool for Easypanel services based on CPU usage.
 
 ## Overview
 
-The Easypanel Autoscaler monitors Docker Swarm services and automatically scales them based on CPU usage thresholds. It helps maintain optimal performance by increasing replicas when CPU usage is high and reducing them when usage is low.
+The Easypanel Autoscaler monitors Easypanel services via the Easypanel API and automatically scales them based on CPU usage thresholds. It helps maintain optimal performance by increasing replicas when CPU usage is high and reducing them when usage is low.
 
 ## Features
 
@@ -21,7 +21,8 @@ The Easypanel Autoscaler monitors Docker Swarm services and automatically scales
 1. Download or build the `autoscaler` executable (it will be placed in the `bin` directory)
 2. Make it executable (if needed): `chmod +x bin/autoscaler`
 3. Ensure you have the proper directory structure:
-   ```
+
+   ```bash
    your-app-directory/
    ├── bin/
    │   └── autoscaler
@@ -35,7 +36,7 @@ If you want to build the executable yourself:
 
 1. Run the build script:
 
-   ```
+   ```bash
    ./build.sh
    ```
 
@@ -54,17 +55,21 @@ Create a `services.json` file in the parent directory of the bin folder (where t
 
 ```json
 {
+  "api": {
+    "base_url": "http://localhost:3000",
+    "token": "your-api-token-here"
+  },
   "global": {
-    "ignore_exposed": false // Set to true to ignore all services with exposed ports
+    "ignore_exposed": false
   },
-  "service-name": {
-    "min": 1, // Minimum number of replicas
-    "max": 10, // Maximum number of replicas
-    "up": 70, // CPU threshold to scale up (%)
-    "down": 30, // CPU threshold to scale down (%)
-    "ignore": false // Set to true to exclude from autoscaling
+  "project_service": {
+    "min": 1,
+    "max": 10,
+    "up": 70,
+    "down": 30,
+    "ignore": false
   },
-  "another-service": {
+  "another-project_another-service": {
     "min": 2,
     "max": 5,
     "up": 75,
@@ -72,6 +77,20 @@ Create a `services.json` file in the parent directory of the bin folder (where t
   }
 }
 ```
+
+### API Configuration
+
+- `api.base_url`: The base URL of your Easypanel instance (default: <http://localhost:3000>)
+- `api.token`: Your Easypanel API token (required)
+
+You can also set these via environment variables:
+
+- `EASYPANEL_API_URL`: Base URL of your Easypanel instance
+- `EASYPANEL_API_TOKEN`: Your Easypanel API token
+
+### Service Configuration
+
+Services are identified by their full name in the format `project_service`. For example, if you have a service named `web` in a project named `myapp`, the configuration key would be `myapp_web`.
 
 If a service is not specified in the configuration, default values will be used:
 
@@ -117,13 +136,13 @@ Ignored services will be logged but won't be scaled regardless of their CPU usag
 
 Simply run the executable:
 
-```
+```bash
 ./autoscaler
 ```
 
 For continuous monitoring, you can set up a cron job to run the autoscaler at regular intervals:
 
-```
+```bash
 */5 * * * * /path/to/autoscaler
 ```
 
@@ -145,6 +164,8 @@ The autoscaler maintains state information in the `state/` directory located in 
 
 ## Requirements
 
-- Docker Swarm running
-- Services deployed as Docker Swarm services
-- Appropriate permissions to execute Docker commands
+- Easypanel instance running and accessible
+- Valid Easypanel API token
+- Network access to the Easypanel API
+- Python 3.7+ (if running from source)
+- `requests` library (automatically installed via requirements.txt)

@@ -1,4 +1,8 @@
 {
+  "api": {
+    "base_url": "http://localhost:3000",
+    "token": "your-api-token-here"
+  },
   "global": {
     "ignore_exposed": true
   },
