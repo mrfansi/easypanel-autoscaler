@@ -193,7 +193,7 @@ The autoscaler provides comprehensive logging with multiple output formats and l
 
 #### Text Format (Default)
 
-```
+```bash
 2024-01-15 10:30:45 - INFO - Service status - CPU: 75.2%, Replicas: 2
 2024-01-15 10:30:46 - INFO - Successfully scaled myapp_web to 3 replicas
 ```
@@ -240,3 +240,93 @@ The autoscaler maintains state information in the `state/` directory located in 
 - Network access to the Easypanel API
 - Python 3.7+ (if running from source)
 - `requests` library (automatically installed via requirements.txt)
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. API Response Parsing Errors
+
+If you see errors like `'str' object has no attribute 'get'` or `Expected projects data to be a list, got <class 'dict'>`, this indicates the API response format is different than expected.
+
+**Solution:**
+
+1. Set logging level to `DEBUG` to see raw API responses
+2. Use the debug script to inspect API responses:
+
+   ```bash
+   python3 debug_api.py
+   ```
+
+3. Check the logs for `Raw API response:` entries to understand the actual response structure
+4. The autoscaler now handles multiple response formats:
+   - List of projects: `[{project1}, {project2}]`
+   - Single project dict: `{name: "project", services: [...]}`
+   - Dict of projects: `{key1: {project1}, key2: {project2}}`
+
+#### 2. CPU Stats Not Found
+
+If you see `CPU stats not found in API response`, the API might be returning CPU data in a different field.
+
+**Solution:**
+
+1. Enable DEBUG logging to see available fields
+2. The autoscaler tries multiple field names: `cpu`, `cpuUsage`, `cpuPercent`, etc.
+3. Check the debug output for `Available stats fields:` to see what's actually returned
+
+#### 3. No Services Found
+
+If the autoscaler reports no services found:
+
+**Solution:**
+
+1. Verify API token has correct permissions
+2. Check that projects and services exist in Easypanel
+3. Use the debug script to test the projects endpoint
+4. Verify the API base URL is correct
+
+#### 4. Authentication Errors
+
+If you get 401/403 errors:
+
+**Solution:**
+
+1. Verify your API token is correct
+2. Check token permissions in Easypanel
+3. Ensure the token hasn't expired
+
+### Debug Script
+
+Use the included `debug_api.py` script to test API connectivity and response formats:
+
+```bash
+python3 debug_api.py
+```
+
+This script will:
+
+- Test the projects and services endpoint
+- Show raw API responses
+- Analyze response structure
+- Test service stats for the first available service
+
+### Logging for Troubleshooting
+
+For troubleshooting, use this logging configuration:
+
+```json
+{
+  "logging": {
+    "level": "DEBUG",
+    "format": "text",
+    "console": true
+  }
+}
+```
+
+This will show:
+
+- Raw API requests and responses
+- Response parsing steps
+- Available data fields
+- Detailed error messages with stack traces

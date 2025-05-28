@@ -257,26 +257,80 @@ def get_projects_and_services():
 
     services = []
     try:
-        # Parse the tRPC response format
-        result = response.get("result", {}).get("data", {}).get("json", [])
+        # Log the raw response for debugging
+        log(f"Raw API response structure: {type(response)}", level="DEBUG")
 
-        for project in result:
-            project_name = project.get("name", "")
-            for service in project.get("services", []):
-                service_name = service.get("name", "")
-                if project_name and service_name:
-                    services.append({
-                        "project": project_name,
-                        "service": service_name,
-                        "full_name": f"{project_name}_{service_name}"
-                    })
+        # Navigate to the actual data
+        data = None
+        if isinstance(response, dict):
+            if "result" in response:
+                result_data = response["result"]
+                if isinstance(result_data, dict) and "data" in result_data:
+                    data_section = result_data["data"]
+                    if isinstance(data_section, dict) and "json" in data_section:
+                        data = data_section["json"]
 
-        log(f"Found {len(services)} services across {len(result)} projects",
+        if data is None:
+            log("Could not find data in API response", level="ERROR")
+            return []
+
+        log(f"Data structure: {type(data)}, keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}", level="DEBUG")
+
+        # Extract projects and services from the new format
+        projects_data = data.get("projects", [])
+        services_data = data.get("services", [])
+
+        log(f"Found {len(projects_data)} projects and {len(services_data)} services in API response", level="DEBUG")
+
+        # Create a mapping of project names for validation
+        project_names = set()
+        for project in projects_data:
+            if isinstance(project, dict) and "name" in project:
+                project_names.add(project["name"])
+
+        log(f"Available projects: {list(project_names)}", level="DEBUG")
+
+        # Process services
+        for service in services_data:
+            if not isinstance(service, dict):
+                log(f"Expected service to be a dict, got {type(service)}: {service}", level="WARNING")
+                continue
+
+            project_name = service.get("projectName", "")
+            service_name = service.get("name", "")
+            service_type = service.get("type", "")
+
+            if not project_name:
+                log(f"Service missing projectName field: {service}", level="WARNING")
+                continue
+
+            if not service_name:
+                log(f"Service missing name field: {service}", level="WARNING")
+                continue
+
+            # Only include app services (skip databases, etc.)
+            if service_type not in ["app"]:
+                log(f"Skipping service {project_name}/{service_name} of type '{service_type}'", level="DEBUG")
+                continue
+
+            # Verify project exists
+            if project_name not in project_names:
+                log(f"Service {service_name} references unknown project {project_name}", level="WARNING")
+                continue
+
+            services.append({
+                "project": project_name,
+                "service": service_name,
+                "full_name": f"{project_name}_{service_name}",
+                "type": service_type
+            })
+
+        log(f"Found {len(services)} app services across {len(project_names)} projects",
             level="INFO")
 
         # Log service details at debug level
         for service in services:
-            log(f"Discovered service: {service['full_name']}",
+            log(f"Discovered service: {service['full_name']} (type: {service['type']})",
                 level="DEBUG",
                 project_name=service['project'],
                 service_name=service['service'])
@@ -284,6 +338,9 @@ def get_projects_and_services():
     except Exception as e:
         log(f"Error parsing projects and services: {e}",
             level="ERROR")
+        # Log the full traceback for debugging
+        import traceback
+        log(f"Full traceback: {traceback.format_exc()}", level="DEBUG")
 
     return services
 
@@ -303,11 +360,45 @@ def get_service_stats(project_name, service_name):
         return None
 
     try:
-        # Parse the tRPC response format
-        result = response.get("result", {}).get("data", {}).get("json", {})
+        # Log the raw response for debugging
+        log(f"Service stats raw response: {json.dumps(response, indent=2)}", level="DEBUG")
+
+        # Handle different possible response structures
+        result = None
+
+        if isinstance(response, dict):
+            # Standard tRPC response format
+            if "result" in response:
+                result_data = response["result"]
+                if isinstance(result_data, dict) and "data" in result_data:
+                    data = result_data["data"]
+                    if isinstance(data, dict) and "json" in data:
+                        result = data["json"]
+                    elif isinstance(data, dict):
+                        result = data
+                elif isinstance(result_data, dict):
+                    result = result_data
+            # Direct data format
+            elif "data" in response:
+                data = response["data"]
+                if isinstance(data, dict) and "json" in data:
+                    result = data["json"]
+                elif isinstance(data, dict):
+                    result = data
+            # Direct stats format
+            else:
+                result = response
+
+        if result is None or not isinstance(result, dict):
+            log(f"Invalid service stats response format for {project_name}/{service_name}", level="WARNING")
+            return None
+
         return result
+
     except Exception as e:
-        log(f"[!] Error parsing service stats for {project_name}/{service_name}: {e}")
+        log(f"Error parsing service stats for {project_name}/{service_name}: {e}", level="ERROR")
+        import traceback
+        log(f"Full traceback: {traceback.format_exc()}", level="DEBUG")
         return None
 
 def get_replicas(project_name, service_name):
@@ -326,12 +417,69 @@ def get_replicas(project_name, service_name):
         return 0
 
     try:
-        # Parse the tRPC response format
-        result = response.get("result", {}).get("data", {}).get("json", {})
-        deploy_config = result.get("deploy", {})
-        return deploy_config.get("replicas", 0)
+        # Log the raw response for debugging
+        log(f"Service inspect raw response: {json.dumps(response, indent=2)}", level="DEBUG")
+
+        # Handle different possible response structures
+        result = None
+
+        if isinstance(response, dict):
+            # Standard tRPC response format
+            if "result" in response:
+                result_data = response["result"]
+                if isinstance(result_data, dict) and "data" in result_data:
+                    data = result_data["data"]
+                    if isinstance(data, dict) and "json" in data:
+                        result = data["json"]
+                    elif isinstance(data, dict):
+                        result = data
+                elif isinstance(result_data, dict):
+                    result = result_data
+            # Direct data format
+            elif "data" in response:
+                data = response["data"]
+                if isinstance(data, dict) and "json" in data:
+                    result = data["json"]
+                elif isinstance(data, dict):
+                    result = data
+            # Direct service format
+            else:
+                result = response
+
+        if result is None or not isinstance(result, dict):
+            log(f"Invalid service inspect response format for {project_name}/{service_name}", level="WARNING")
+            return 0
+
+        # Try to find replicas in different possible locations
+        replicas = 0
+
+        # Check deploy.replicas
+        if "deploy" in result and isinstance(result["deploy"], dict):
+            replicas = result["deploy"].get("replicas", 0)
+        # Check direct replicas field
+        elif "replicas" in result:
+            replicas = result["replicas"]
+        # Check spec.replicas (Docker Swarm format)
+        elif "spec" in result and isinstance(result["spec"], dict):
+            spec = result["spec"]
+            if "mode" in spec and isinstance(spec["mode"], dict):
+                mode = spec["mode"]
+                if "replicated" in mode and isinstance(mode["replicated"], dict):
+                    replicas = mode["replicated"].get("replicas", 0)
+
+        # Ensure replicas is an integer
+        try:
+            replicas = int(replicas)
+        except (ValueError, TypeError):
+            log(f"Invalid replicas value for {project_name}/{service_name}: {replicas}", level="WARNING")
+            replicas = 0
+
+        return replicas
+
     except Exception as e:
-        log(f"[!] Error getting replicas for {project_name}/{service_name}: {e}")
+        log(f"Error getting replicas for {project_name}/{service_name}: {e}", level="ERROR")
+        import traceback
+        log(f"Full traceback: {traceback.format_exc()}", level="DEBUG")
         return 0
 
 def has_exposed_ports(project_name, service_name):
@@ -348,14 +496,57 @@ def has_exposed_ports(project_name, service_name):
     response = make_api_request("/api/trpc/services.app.getExposedPorts", params=params)
     if not response:
         # Default to False to avoid blocking autoscaling due to API errors
+        log(f"No response from exposed ports API for {project_name}/{service_name}", level="DEBUG")
         return False
 
     try:
-        # Parse the tRPC response format
-        result = response.get("result", {}).get("data", {}).get("json", [])
-        return len(result) > 0
+        # Log the raw response for debugging
+        log(f"Exposed ports raw response: {json.dumps(response, indent=2)}", level="DEBUG")
+
+        # Handle different possible response structures
+        result = None
+
+        if isinstance(response, dict):
+            # Standard tRPC response format
+            if "result" in response:
+                result_data = response["result"]
+                if isinstance(result_data, dict) and "data" in result_data:
+                    data = result_data["data"]
+                    if isinstance(data, dict) and "json" in data:
+                        result = data["json"]
+                    elif isinstance(data, list):
+                        result = data
+                elif isinstance(result_data, list):
+                    result = result_data
+            # Direct data format
+            elif "data" in response:
+                data = response["data"]
+                if isinstance(data, dict) and "json" in data:
+                    result = data["json"]
+                elif isinstance(data, list):
+                    result = data
+            # Direct ports format
+            elif isinstance(response, list):
+                result = response
+        elif isinstance(response, list):
+            result = response
+
+        if result is None:
+            log(f"Could not find ports data for {project_name}/{service_name}", level="DEBUG")
+            return False
+
+        if not isinstance(result, list):
+            log(f"Expected ports data to be a list for {project_name}/{service_name}, got {type(result)}", level="WARNING")
+            return False
+
+        has_ports = len(result) > 0
+        log(f"Service {project_name}/{service_name} has {len(result)} exposed ports", level="DEBUG")
+        return has_ports
+
     except Exception as e:
-        log(f"[!] Error checking exposed ports for {project_name}/{service_name}: {e}")
+        log(f"Error checking exposed ports for {project_name}/{service_name}: {e}", level="ERROR")
+        import traceback
+        log(f"Full traceback: {traceback.format_exc()}", level="DEBUG")
         # Default to False to avoid blocking autoscaling due to inspection errors
         return False
 
@@ -493,24 +684,94 @@ def main():
             # Extract CPU usage from stats
             avg_cpu = None
             try:
-                # The exact structure depends on the API response format
-                # This might need adjustment based on actual API response
-                if "cpu" in stats:
-                    avg_cpu = float(stats["cpu"])
-                elif "cpuUsage" in stats:
-                    avg_cpu = float(stats["cpuUsage"])
-                else:
-                    log(f"CPU stats not found in API response",
+                # Log available stats fields for debugging
+                log(f"Available stats fields: {list(stats.keys())}",
+                    level="DEBUG",
+                    service_name=full_name)
+
+                # Handle the specific Easypanel API format
+                if "cpu" in stats and isinstance(stats["cpu"], dict):
+                    cpu_data = stats["cpu"]
+                    if "percent" in cpu_data:
+                        # CPU percent is returned as a decimal (0.042639974976540505 = 4.26%)
+                        avg_cpu = float(cpu_data["percent"]) * 100
+                        log(f"Found CPU usage in 'cpu.percent': {avg_cpu:.2f}%",
+                            level="DEBUG",
+                            service_name=full_name)
+
+                # Fallback: Try different possible CPU field names
+                if avg_cpu is None:
+                    cpu_fields = ["cpu", "cpuUsage", "cpuPercent", "cpuPercentage", "CPU", "cpu_usage", "cpu_percent"]
+
+                    for field in cpu_fields:
+                        if field in stats:
+                            cpu_value = stats[field]
+                            # Handle different formats (percentage string, float, etc.)
+                            if isinstance(cpu_value, str):
+                                # Remove % sign if present
+                                cpu_value = cpu_value.replace('%', '').strip()
+                                avg_cpu = float(cpu_value)
+                            elif isinstance(cpu_value, (int, float)):
+                                avg_cpu = float(cpu_value)
+                            elif isinstance(cpu_value, dict):
+                                # Skip dict values in this loop, handled above
+                                continue
+
+                            log(f"Found CPU usage in field '{field}': {avg_cpu}%",
+                                level="DEBUG",
+                                service_name=full_name)
+                            break
+
+                # Final fallback: Try to find CPU in nested objects
+                if avg_cpu is None:
+                    for key, value in stats.items():
+                        if isinstance(value, dict):
+                            nested_cpu_fields = ["percent", "percentage", "cpu", "cpuUsage", "cpuPercent"]
+                            for cpu_field in nested_cpu_fields:
+                                if cpu_field in value:
+                                    cpu_value = value[cpu_field]
+                                    if isinstance(cpu_value, str):
+                                        cpu_value = cpu_value.replace('%', '').strip()
+                                    cpu_raw = float(cpu_value)
+
+                                    # If it's a decimal less than 1, assume it's a percentage in decimal form
+                                    if cpu_raw < 1.0 and cpu_field in ["percent", "percentage"]:
+                                        avg_cpu = cpu_raw * 100
+                                    else:
+                                        avg_cpu = cpu_raw
+
+                                    log(f"Found CPU usage in nested field '{key}.{cpu_field}': {avg_cpu:.2f}%",
+                                        level="DEBUG",
+                                        service_name=full_name)
+                                    break
+                        if avg_cpu is not None:
+                            break
+
+                if avg_cpu is None:
+                    log(f"CPU stats not found in API response. Available fields: {list(stats.keys())}",
                         level="WARNING",
                         service_name=full_name,
-                        action="cpu_stats_missing")
+                        action="cpu_stats_missing",
+                        available_fields=list(stats.keys()))
                     services_errors += 1
                     continue
+
+                # Ensure CPU is a reasonable value (0-100%)
+                if avg_cpu < 0:
+                    avg_cpu = 0
+                elif avg_cpu > 100:
+                    # If value is > 100, it might be in a different scale
+                    if avg_cpu > 1000:
+                        avg_cpu = avg_cpu / 1000  # Convert from per-mille
+                    elif avg_cpu > 100:
+                        avg_cpu = avg_cpu / 10   # Convert from per-thousand
+
             except (ValueError, TypeError) as e:
                 log(f"Error parsing CPU stats: {e}",
                     level="ERROR",
                     service_name=full_name,
-                    action="cpu_parse_error")
+                    action="cpu_parse_error",
+                    stats_data=stats)
                 services_errors += 1
                 continue
 
