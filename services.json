@@ -3,6 +3,13 @@
     "base_url": "http://localhost:3000",
     "token": "your-api-token-here"
   },
+  "logging": {
+    "level": "INFO",
+    "format": "text",
+    "console": true,
+    "max_size": 10485760,
+    "backup_count": 5
+  },
   "global": {
     "ignore_exposed": true
   },

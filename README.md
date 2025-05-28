@@ -92,6 +92,32 @@ You can also set these via environment variables:
 
 Services are identified by their full name in the format `project_service`. For example, if you have a service named `web` in a project named `myapp`, the configuration key would be `myapp_web`.
 
+### Logging Configuration
+
+The autoscaler supports comprehensive logging with the following options:
+
+- `logging.level`: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) - default: INFO
+- `logging.format`: Log format ("text" or "json") - default: text
+- `logging.console`: Enable console output with colors - default: true
+- `logging.max_size`: Maximum log file size in bytes before rotation - default: 10MB
+- `logging.backup_count`: Number of backup log files to keep - default: 5
+
+Example logging configuration:
+
+```json
+{
+  "logging": {
+    "level": "DEBUG",
+    "format": "json",
+    "console": true,
+    "max_size": 20971520,
+    "backup_count": 10
+  }
+}
+```
+
+### Default Service Values
+
 If a service is not specified in the configuration, default values will be used:
 
 - Minimum replicas: 1
@@ -148,12 +174,57 @@ For continuous monitoring, you can set up a cron job to run the autoscaler at re
 
 ## Logs
 
-The autoscaler logs all activities to `autoscaler.log` in the parent directory of the bin folder. The log includes:
+The autoscaler provides comprehensive logging with multiple output formats and log levels.
 
-- Service CPU usage
-- Current replica count
-- Scaling actions
-- Errors and warnings
+### Log Files
+
+- **Main log file**: `autoscaler.log` in the parent directory of the bin folder
+- **Rotated logs**: `autoscaler.log.1`, `autoscaler.log.2`, etc. (when rotation is enabled)
+
+### Log Levels
+
+- **DEBUG**: Detailed information for debugging, including API requests/responses
+- **INFO**: General information about autoscaler operations and scaling decisions
+- **WARNING**: Warning messages for non-critical issues
+- **ERROR**: Error messages for failed operations
+- **CRITICAL**: Critical errors that may cause the autoscaler to stop
+
+### Log Formats
+
+#### Text Format (Default)
+
+```
+2024-01-15 10:30:45 - INFO - Service status - CPU: 75.2%, Replicas: 2
+2024-01-15 10:30:46 - INFO - Successfully scaled myapp_web to 3 replicas
+```
+
+#### JSON Format
+
+```json
+{"timestamp": "2024-01-15T10:30:45.123456", "level": "INFO", "message": "Service status - CPU: 75.2%, Replicas: 2", "service_name": "myapp_web", "cpu_usage": 75.2, "replicas": 2}
+```
+
+### Console Output
+
+When console logging is enabled, the autoscaler will output colored logs to the terminal:
+
+- **DEBUG**: Cyan
+- **INFO**: Green
+- **WARNING**: Yellow
+- **ERROR**: Red
+- **CRITICAL**: Magenta
+
+### Log Content
+
+The logs include detailed information about:
+
+- **Service Discovery**: Found projects and services
+- **CPU Metrics**: Current CPU usage and historical trends
+- **Scaling Decisions**: Why services were scaled up, down, or left unchanged
+- **API Performance**: Request/response times and status codes
+- **Configuration**: Applied settings and thresholds
+- **Errors**: Detailed error messages with context
+- **Statistics**: Run summaries with processing counts and timing
 
 ## State Directory
 

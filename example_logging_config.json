@@ -1,0 +1,36 @@
+{
+  "api": {
+    "base_url": "http://localhost:3000",
+    "token": "your-api-token-here"
+  },
+  "logging": {
+    "level": "DEBUG",
+    "format": "json",
+    "console": true,
+    "max_size": 20971520,
+    "backup_count": 10
+  },
+  "global": {
+    "ignore_exposed": false
+  },
+  "myproject_webapp": {
+    "min": 1,
+    "max": 5,
+    "up": 70,
+    "down": 30,
+    "ignore": false
+  },
+  "myproject_api": {
+    "min": 2,
+    "max": 8,
+    "up": 80,
+    "down": 25,
+    "ignore": false
+  },
+  "system_redis": {
+    "ignore": true
+  },
+  "system_database": {
+    "ignore": true
+  }
+}
