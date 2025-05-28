@@ -550,8 +550,96 @@ def has_exposed_ports(project_name, service_name):
         # Default to False to avoid blocking autoscaling due to inspection errors
         return False
 
+def get_deployment_url(project_name, service_name):
+    """Get the deployment URL for a service."""
+    params = {
+        "input": json.dumps({
+            "json": {
+                "projectName": project_name,
+                "serviceName": service_name
+            }
+        })
+    }
+
+    response = make_api_request("/api/trpc/services.app.inspectService", params=params)
+    if not response:
+        return None
+
+    try:
+        # Navigate to the service data
+        result = None
+        if isinstance(response, dict):
+            if "result" in response:
+                result_data = response["result"]
+                if isinstance(result_data, dict) and "data" in result_data:
+                    data = result_data["data"]
+                    if isinstance(data, dict) and "json" in data:
+                        result = data["json"]
+
+        if result and isinstance(result, dict):
+            deployment_url = result.get("deploymentUrl")
+            if deployment_url:
+                log(f"Found deployment URL for {project_name}/{service_name}: {deployment_url}",
+                    level="DEBUG",
+                    service_name=f"{project_name}_{service_name}")
+                return deployment_url
+
+        log(f"No deployment URL found for {project_name}/{service_name}",
+            level="WARNING",
+            service_name=f"{project_name}_{service_name}")
+        return None
+
+    except Exception as e:
+        log(f"Error getting deployment URL for {project_name}/{service_name}: {e}",
+            level="ERROR")
+        return None
+
+def trigger_deployment(deployment_url, project_name, service_name, full_name):
+    """Trigger deployment by calling the deployment URL."""
+    if not deployment_url:
+        log(f"No deployment URL available for {full_name}",
+            level="WARNING",
+            service_name=full_name,
+            action="deploy_skipped")
+        return False
+
+    log(f"Triggering deployment for {full_name}",
+        level="INFO",
+        service_name=full_name,
+        action="deploy_trigger",
+        deployment_url=deployment_url)
+
+    try:
+        # The deployment URL is typically a direct HTTP endpoint
+        # We need to make a POST request to it
+        response = requests.post(deployment_url, timeout=60)
+
+        if response.status_code in [200, 201, 202]:
+            log(f"Successfully triggered deployment for {full_name}",
+                level="INFO",
+                service_name=full_name,
+                action="deploy_success",
+                status_code=response.status_code)
+            return True
+        else:
+            log(f"Failed to trigger deployment for {full_name} - HTTP {response.status_code}",
+                level="ERROR",
+                service_name=full_name,
+                action="deploy_failed",
+                status_code=response.status_code,
+                response_text=response.text[:200])  # Limit response text
+            return False
+
+    except requests.exceptions.RequestException as e:
+        log(f"Error triggering deployment for {full_name}: {e}",
+            level="ERROR",
+            service_name=full_name,
+            action="deploy_error",
+            error=str(e))
+        return False
+
 def scale_service(project_name, service_name, replicas, full_name):
-    """Scale a service to the specified number of replicas."""
+    """Scale a service to the specified number of replicas and trigger deployment."""
     log(f"Attempting to scale service to {replicas} replicas",
         level="INFO",
         service_name=full_name,
@@ -559,6 +647,7 @@ def scale_service(project_name, service_name, replicas, full_name):
         action="scale",
         target_replicas=replicas)
 
+    # Step 1: Update the deployment configuration
     data = {
         "json": {
             "projectName": project_name,
@@ -570,9 +659,30 @@ def scale_service(project_name, service_name, replicas, full_name):
     }
 
     response = make_api_request("/api/trpc/services.app.updateDeploy", method="POST", data=data)
-    if response:
+    if not response:
+        log(f"Failed to update deployment config for {full_name}",
+            level="ERROR",
+            service_name=full_name,
+            project_name=project_name,
+            action="scale_config_failed",
+            target_replicas=replicas)
+        return False
+
+    log(f"Successfully updated deployment config for {full_name}",
+        level="INFO",
+        service_name=full_name,
+        action="scale_config_success",
+        replicas=replicas)
+
+    # Step 2: Get the deployment URL
+    deployment_url = get_deployment_url(project_name, service_name)
+
+    # Step 3: Trigger the actual deployment
+    deployment_success = trigger_deployment(deployment_url, project_name, service_name, full_name)
+
+    if deployment_success:
         mark_scaled(full_name)
-        log(f"Successfully scaled {full_name} to {replicas} replicas",
+        log(f"Successfully scaled and deployed {full_name} to {replicas} replicas",
             level="INFO",
             service_name=full_name,
             project_name=project_name,
@@ -580,13 +690,15 @@ def scale_service(project_name, service_name, replicas, full_name):
             replicas=replicas)
         return True
     else:
-        log(f"Failed to scale {full_name} to {replicas} replicas",
-            level="ERROR",
+        log(f"Deployment config updated but deployment trigger failed for {full_name}",
+            level="WARNING",
             service_name=full_name,
             project_name=project_name,
-            action="scale_failed",
-            target_replicas=replicas)
-        return False
+            action="scale_partial_success",
+            replicas=replicas)
+        # Still mark as scaled since the config was updated
+        mark_scaled(full_name)
+        return True  # Return True since the scaling config was updated
 
 def is_in_cooldown(service):
     path = os.path.join(STATE_DIR, f"{service}.last")
