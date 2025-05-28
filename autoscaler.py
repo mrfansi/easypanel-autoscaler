@@ -59,9 +59,14 @@ def get_replicas(service):
     return int(output) if output.isdigit() else 0
 
 def has_exposed_ports(service):
-    # Check if the service has any published ports
-    ports_output = run(f"docker service inspect {service} --format '{{{{range .Spec.EndpointSpec.Ports}}}}{{{{.PublishedPort}}}} {{{{end}}}}'")
-    return bool(ports_output.strip())
+    """Check if the service has any published ports."""
+    try:
+        ports_output = run(f"docker service inspect {service} --format '{{{{range .Spec.EndpointSpec.Ports}}}}{{{{.PublishedPort}}}} {{{{end}}}}'")
+        return bool(ports_output.strip())
+    except Exception as e:
+        log(f"[!] Error checking exposed ports for {service}: {e}")
+        # Default to False to avoid blocking autoscaling due to inspection errors
+        return False
 
 def scale_service(service, replicas):
     run(f"docker service scale {service}={replicas}")
