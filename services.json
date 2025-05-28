@@ -1,0 +1,20 @@
+{
+  "global": {
+    "ignore_exposed": true
+  },
+  "system_redis": {
+    "ignore": true
+  },
+  "system_mariadb": {
+    "ignore": true
+  },
+  "system_mysql": {
+    "ignore": true
+  },
+  "system_mysql-backup": {
+    "ignore": true
+  },
+  "system_mariadb-backup": {
+    "ignore": true
+  }
+}
