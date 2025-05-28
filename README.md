@@ -18,51 +18,51 @@ The Easypanel Autoscaler monitors Docker Swarm services and automatically scales
 
 ### Using the Executable
 
-1. Download the `autoscaler` executable from the `dist` directory
-2. Make it executable (if needed): `chmod +x autoscaler`
-3. Place it in your desired location
+1. Download or build the `autoscaler` executable (it will be placed in the `bin` directory)
+2. Make it executable (if needed): `chmod +x bin/autoscaler`
+3. Ensure you have the proper directory structure:
+   ```
+   your-app-directory/
+   ├── bin/
+   │   └── autoscaler
+   ├── services.json
+   └── state/
+   ```
 
 ### Building from Source
 
 If you want to build the executable yourself:
 
-1. Create a virtual environment:
+1. Run the build script:
 
    ```
-   python3 -m venv .venv
+   ./build.sh
    ```
 
-2. Activate the virtual environment:
+   This script will:
+   - Create a `bin` directory if it doesn't exist
+   - Activate the virtual environment if it exists
+   - Install PyInstaller if needed
+   - Build the executable directly to the `bin` directory
+   - Clean up build artifacts
 
-   ```
-   source .venv/bin/activate
-   ```
-
-3. Install PyInstaller:
-
-   ```
-   pip install pyinstaller
-   ```
-
-4. Build the executable:
-
-   ```
-   pyinstaller autoscaler.spec
-   ```
-
-5. The executable will be available in the `dist` directory
+2. The executable will be automatically generated in the `bin` directory
 
 ## Configuration
 
-Create a `services.json` file in the same directory as the autoscaler with the following structure:
+Create a `services.json` file in the parent directory of the bin folder (where the autoscaler executable is located) with the following structure:
 
 ```json
 {
+  "global": {
+    "ignore_exposed": false // Set to true to ignore all services with exposed ports
+  },
   "service-name": {
     "min": 1, // Minimum number of replicas
     "max": 10, // Maximum number of replicas
     "up": 70, // CPU threshold to scale up (%)
-    "down": 30 // CPU threshold to scale down (%)
+    "down": 30, // CPU threshold to scale down (%)
+    "ignore": false // Set to true to exclude from autoscaling
   },
   "another-service": {
     "min": 2,
@@ -79,6 +79,39 @@ If a service is not specified in the configuration, default values will be used:
 - Maximum replicas: 10
 - Scale-up threshold: 70%
 - Scale-down threshold: 30%
+- Ignore: false (service will be autoscaled)
+
+### Ignoring Services
+
+There are two ways to exclude services from autoscaling:
+
+#### 1. Ignoring Specific Services
+
+You can exclude specific services from autoscaling by setting the `ignore` flag to `true` in their configuration:
+
+```json
+{
+  "service-to-ignore": {
+    "ignore": true
+  }
+}
+```
+
+#### 2. Ignoring Services with Exposed Ports
+
+You can automatically ignore all services that have exposed ports by setting the `ignore_exposed` flag to `true` in the global configuration:
+
+```json
+{
+  "global": {
+    "ignore_exposed": true
+  }
+}
+```
+
+This is useful for excluding public-facing services that require continuous availability from being scaled down.
+
+Ignored services will be logged but won't be scaled regardless of their CPU usage.
 
 ## Usage
 
@@ -96,7 +129,7 @@ For continuous monitoring, you can set up a cron job to run the autoscaler at re
 
 ## Logs
 
-The autoscaler logs all activities to `autoscaler.log` in the same directory. The log includes:
+The autoscaler logs all activities to `autoscaler.log` in the parent directory of the bin folder. The log includes:
 
 - Service CPU usage
 - Current replica count
@@ -105,7 +138,7 @@ The autoscaler logs all activities to `autoscaler.log` in the same directory. Th
 
 ## State Directory
 
-The autoscaler maintains state information in the `./state/` directory:
+The autoscaler maintains state information in the `state/` directory located in the parent directory of the bin folder:
 
 - Last scaling time for each service (for cooldown management)
 - Previous CPU averages (for trend analysis)

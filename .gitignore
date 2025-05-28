@@ -47,3 +47,4 @@ state/
 autoscaler.log
 .windsurf/
 .services.json
+bin/

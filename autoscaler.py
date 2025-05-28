@@ -1,17 +1,30 @@
 import os
 import json
 import subprocess
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 DEFAULT_MIN_REPLICAS = 1
 DEFAULT_MAX_REPLICAS = 10
 DEFAULT_UP_THRESHOLD = 70
 DEFAULT_DOWN_THRESHOLD = 30
 COOLDOWN_MINUTES = 5
+DEFAULT_IGNORE_EXPOSED = True
 
-STATE_DIR = "./state/"
-CONFIG_PATH = "./services.json"
-LOG_FILE = "./autoscaler.log"
+# Get the directory where the executable is located
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable in bin folder
+    BIN_DIR = Path(sys.executable).parent.absolute()
+    # App directory is the parent of bin
+    APP_DIR = BIN_DIR.parent.absolute()
+else:
+    # Running as script
+    APP_DIR = Path(__file__).parent.absolute()
+
+STATE_DIR = os.path.join(APP_DIR, "state/")
+CONFIG_PATH = os.path.join(APP_DIR, "services.json")
+LOG_FILE = os.path.join(APP_DIR, "autoscaler.log")
 
 os.makedirs(STATE_DIR, exist_ok=True)
 
@@ -45,6 +58,11 @@ def get_replicas(service):
     output = run(f"docker service inspect {service} --format '{{{{.Spec.Mode.Replicated.Replicas}}}}'")
     return int(output) if output.isdigit() else 0
 
+def has_exposed_ports(service):
+    # Check if the service has any published ports
+    ports_output = run(f"docker service inspect {service} --format '{{{{range .Spec.EndpointSpec.Ports}}}}{{{{.PublishedPort}}}} {{{{end}}}}'")
+    return bool(ports_output.strip())
+
 def scale_service(service, replicas):
     run(f"docker service scale {service}={replicas}")
     mark_scaled(service)
@@ -77,6 +95,10 @@ def main():
     log("🌀 Running autoscaler...")
 
     config = load_config()
+    # Get global configuration settings
+    global_config = config.get("global", {})
+    ignore_exposed = global_config.get("ignore_exposed", DEFAULT_IGNORE_EXPOSED)
+    
     cpu_sum = {}
     cpu_count = {}
 
@@ -96,11 +118,22 @@ def main():
             log(f"[!] No containers found for {service}")
             continue
 
+        svc_cfg = config.get(service, {})
+        
+        # Check if service is set to be ignored
+        if svc_cfg.get("ignore", False):
+            log(f"[i] {service} is set to be ignored, skipping")
+            continue
+            
+        # Check if service has exposed ports and should be ignored
+        if ignore_exposed and has_exposed_ports(service):
+            log(f"[i] {service} has exposed ports and is set to be ignored, skipping")
+            continue
+            
         avg_cpu = cpu_sum[service] / cpu_count[service]
         prev = get_previous_avg(service)
         save_avg_cpu(service, avg_cpu)
 
-        svc_cfg = config.get(service, {})
         min_r = svc_cfg.get("min", DEFAULT_MIN_REPLICAS)
         max_r = svc_cfg.get("max", DEFAULT_MAX_REPLICAS)
         up_t = svc_cfg.get("up", DEFAULT_UP_THRESHOLD)
