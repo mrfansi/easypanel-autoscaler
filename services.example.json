@@ -1,7 +1,8 @@
 {
   "api": {
     "base_url": "http://localhost:3000",
-    "token": "your-api-token-here"
+    "token": "your-api-token-here",
+    "verify_ssl": false
   },
   "logging": {
     "level": "DEBUG",
